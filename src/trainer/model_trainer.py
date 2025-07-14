@@ -127,8 +127,18 @@ class BaseTrainer:
         """
         Full train logic
         """
+        for epoch in range(self.num_epochs):
+            epoch_loss, val_loss = self._train_epoch(epoch)
 
-        pass
+
+            if epoch % 5 == 0:
+                self._save_checkpoint(save_best=False,only_best=False)
+
+
+            if val_loss < self.best_loss:
+                self.best_loss = val_loss
+                self._save_checkpoint(epoch, save_best=True, only_best=True)
+                self.logger.info(f"New best model! Val Loss: {val_loss:.4f}")
 
     
     def _evaluate_epoch(self, epoch):
