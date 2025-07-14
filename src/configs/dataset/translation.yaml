@@ -1,0 +1,9 @@
+_target_: src.datasets.TranslationDataModule
+batch_size: 4
+max_length: 64
+train_size: 10000
+eval_size: 1000
+test_size: 1000
+model_name: "Helsinki-NLP/opus-mt-en-ru"
+num_workers: 4
+pin_memory: True

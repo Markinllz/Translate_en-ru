@@ -16,10 +16,6 @@ from src.utils.io_utils import ROOT_PATH
 
 def set_worker_seed(worker_id):
     """
-    Set seed for each dataloader worker.
-
-    For more info, see https://pytorch.org/docs/stable/notes/randomness.html
-
     Args:
         worker_id (int): id of the worker.
     """
@@ -45,7 +41,6 @@ def set_random_seed(seed):
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-# https://github.com/wandb/wandb/blob/main/wandb/sdk/lib/runid.py
 def generate_id(length: int = 8) -> str:
     """
     Generate a random base-36 string of `length` digits.

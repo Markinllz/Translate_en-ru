@@ -10,6 +10,8 @@ class TranslationDataModule:
         train_size=10000,
         eval_size=1000,
         test_size=1000,
+        num_workers = 4,
+        pin_memory = True,
         model_name="Helsinki-NLP/opus-mt-en-ru"
     ):
         self.batch_size = batch_size
@@ -18,6 +20,9 @@ class TranslationDataModule:
         self.eval_size = eval_size
         self.test_size = test_size
         self.model_name = model_name
+        self.num_workes = num_workers
+        self.pin_memory = pin_memory
+
 
         self.tokenizer = MarianTokenizer.from_pretrained(self.model_name)
         self.src_vocab_size = self.tokenizer.vocab_size
@@ -48,8 +53,8 @@ class TranslationDataModule:
     def get_dataloaders(self):
         if self.tokenized_train is None:
             self.prepare_data()
-        train_loader = DataLoader(self.tokenized_train, batch_size=self.batch_size, shuffle=True)
-        eval_loader = DataLoader(self.tokenized_eval, batch_size=self.batch_size)
-        test_loader = DataLoader(self.tokenized_test, batch_size=self.batch_size)
+        train_loader = DataLoader(self.tokenized_train, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workes, pin_memory=self.pin_memory)
+        eval_loader = DataLoader(self.tokenized_eval, batch_size=self.batch_size, num_workers=self.num_workes, pin_memory=self.pin_memory)
+        test_loader = DataLoader(self.tokenized_test, batch_size=self.batch_size, num_workers = self.num_workes, pin_memory= self.pin_memory)
         return train_loader, eval_loader, test_loader
     
