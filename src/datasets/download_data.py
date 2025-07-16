@@ -25,6 +25,12 @@ class TranslationDataModule:
         self.pin_memory = pin_memory
 
         self.tokenizer = MarianTokenizer.from_pretrained(self.model_name)
+        self.tokenizer.bos_token = "<s>"
+        self.tokenizer.eos_token = "</s>"
+
+        self.tokenizer.bos_token_id = 0
+        self.tokenizer.eos_token_id = 2
+
         self.src_vocab_size = self.tokenizer.vocab_size
         self.tgt_vocab_size = self.tokenizer.vocab_size
 

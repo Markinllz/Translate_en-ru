@@ -1,5 +1,6 @@
 from torch import nn
 from torch.nn import Sequential
+import torch
 
 
 class MyTransformer(nn.Module):
@@ -35,3 +36,41 @@ class MyTransformer(nn.Module):
         logits = self.output_projection(output)
         
         return type('Output', (), {'logits': logits})()
+    
+
+    def generate(self, src, src_mask=None, max_length=50):
+        """
+        Инференс для одного предложения.
+        - src: (src_seq_len,)
+        - src_mask: (src_seq_len,), если есть паддинг
+        Возвращает: (generated_seq_len,)
+        """
+        
+        if src.dim() == 1:
+            src = src.unsqueeze(1)  
+        
+        if src_mask is not None and src_mask.dim() == 1:
+            src_mask = src_mask.unsqueeze(0) 
+        
+        device = src.device
+        memory = self.transformer.encoder(self.src_embedding(src), 
+                                         src_key_padding_mask=src_mask)
+        
+        
+        tgt = torch.tensor([[0]], dtype=torch.long, device=device)  
+        
+        for _ in range(max_length):
+            output = self.transformer.decoder(
+                self.tgt_embedding(tgt), 
+                memory,
+                memory_key_padding_mask=src_mask
+            )
+            logits = self.output_projection(output[-1:])  
+            next_token = logits.argmax(-1)
+            tgt = torch.cat([tgt, next_token], dim=0)
+            
+          
+            if next_token.item() == "</s>":
+                break
+                
+        return tgt.squeeze(1) 

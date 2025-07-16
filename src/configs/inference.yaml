@@ -1,0 +1,20 @@
+defaults:
+  - model: huggingface_transformer
+  - dataset: translation
+  - _self_
+
+
+experiment:
+  name: "translation_inference"
+  seed: 42
+  description: "Inference for EN-RU translation model"
+
+logging:
+  level: "INFO"
+
+inferencer:
+  seed: 42
+  device: auto
+  save_path: "outputs/inference"
+  text: "Hello, how are you?"  # текст для перевода
+  output_file: "translation.txt"  # файл для сохранения перевода

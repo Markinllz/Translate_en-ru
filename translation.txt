@@ -1,0 +1,2 @@
+English: Hello, how are you?
+Russian: Привет, как дела?
