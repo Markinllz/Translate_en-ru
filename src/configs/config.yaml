@@ -29,7 +29,7 @@ trainer:
   resume_from: null
   device: auto
   save_dir: "saved"
-  num_epochs: 25
+  num_epochs: 5
   seed: 42
   override: True
   epoch_len: 1000 
