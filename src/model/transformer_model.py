@@ -15,10 +15,16 @@ class MyTransformer(nn.Module):
             num_encoder_layers=num_encoder_layers,
             dim_feedforward=2048
         )
+        
         self.output_projection = nn.Linear(embed_dim, tgt_vocab_size)
 
     def forward(self, src, tgt=None, src_mask=None, tgt_mask=None):
         src = self.src_embedding(src)
+        
+        if src_mask is not None:
+            src_mask = src_mask.bool()
+        if tgt_mask is not None:
+            tgt_mask = tgt_mask.bool()
         
         if tgt is not None:
             tgt = self.tgt_embedding(tgt)
@@ -28,4 +34,4 @@ class MyTransformer(nn.Module):
         
         logits = self.output_projection(output)
         
-        return type('Output', (), {'logits': logits})() 
+        return type('Output', (), {'logits': logits})()
