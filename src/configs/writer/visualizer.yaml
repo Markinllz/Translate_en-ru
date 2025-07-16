@@ -1,0 +1,7 @@
+_target_: src.logger.WandBWriter
+project_name: "pytorch_translate"
+entity: null
+run_id: None
+run_name: "testing"
+mode: "online"
+id_length: 8

@@ -1,6 +1,6 @@
 _target_: src.model.MyTransformer
-src_vocab_size: 32000
-tgt_vocab_size: 32000
+src_vocab_size: 62518
+tgt_vocab_size: 62518
 embed_dim : 512
 nhead : 8
 num_encoder_layers : 6 

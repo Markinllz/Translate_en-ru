@@ -1,4 +1,5 @@
 from datetime import datetime
+import wandb
 
 import numpy as np
 import pandas as pd
@@ -48,6 +49,7 @@ class WandBWriter:
                 save_code = kwargs.get("save_code", False)
 
             )
+            self.wandb = wandb
         except ImportError:
             logger.warning("Install WandB")
 
@@ -85,7 +87,7 @@ class WandBWriter:
             self.timer == datetime.now()
 
         else:
-            duration = datetime.now() - self.timer()
+            duration = datetime.now() - self.timer
 
             self.add_scalar("steps_per_sec", (self.step - previous_step) / duration.total_seconds())
 
@@ -124,7 +126,7 @@ class WandBWriter:
         """
          
 
-         self.wand.log(
+         self.wandb.log(
              {
                  self._object_name(scalar_name): scalar
              },

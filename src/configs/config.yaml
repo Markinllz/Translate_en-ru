@@ -1,5 +1,6 @@
 defaults:
   - model: transformer
+  - writer : visualizer
   - dataset: translation
   - _self_
 
@@ -29,3 +30,6 @@ trainer:
   device: auto
   save_dir: "saved"
   num_epochs: 25
+  seed: 42
+  override: True
+  epoch_len: 1000 

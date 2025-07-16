@@ -16,6 +16,8 @@ class CrossEntropyLoss(nn.Module):
             logits (Tensor): model output predictions.
             labels (Tensor): ground-truth labels.
         Returns:
-            losses (dict): dict containing calculated loss functions.
+            loss (Tensor): calculated loss value.
         """
-        return {"loss": self.loss(logits, labels)}
+        logits = logits.reshape(-1, logits.size(-1))
+        labels = labels.reshape(-1)
+        return self.loss(logits, labels)

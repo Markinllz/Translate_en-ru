@@ -1,11 +1,10 @@
 import torch.optim as optim
-from logger.logger import setup_logging
-from logger.wandb import WandBWriter
+from src.logger.logger import setup_logging
+from src.logger.wandb import WandBWriter
 from tqdm import tqdm
 from abc import abstractmethod
 import torch
-
-from src.utils.io_utils import ROOT_PATH
+from pathlib import Path
 
 class BaseTrainer:
     def __init__(
@@ -39,19 +38,16 @@ class BaseTrainer:
         self.num_epochs = num_epochs
         self.writer = writer
         self.train_loader = dataloaders["train"]
+        self.eval_loader = dataloaders.get("eval", dataloaders["test"])
         self.test_loader = dataloaders["test"]
         self.epoch_len = len(self.train_loader)
         
-        self.checkpoint_dir = (
-            ROOT_PATH / config.trainer.save_dir / config.writer.run_name
-        )
-        self.best_loss = float('inf')
         self._last_epoch = 0
-
+        self.best_loss = float('inf')
+        self.checkpoint_dir = Path(config.trainer.save_dir)
+        self.checkpoint_dir.mkdir(exist_ok=True)
+        
     def train(self):
-        """
-        Wrapper around training process to save model on keyboard interrupt.
-        """
         try:
             self._train_process()
         except KeyboardInterrupt as e:
@@ -60,78 +56,59 @@ class BaseTrainer:
             raise e
     
     def _train_epoch(self, epoch):
-        """
-        Training logic for an epoch, including logging and evaluation on
-        non-train partitions.
-
-        Args:
-            epoch (int): current training epoch.
-        Returns:
-            logs (dict): logs that contain the average loss and metric in
-                this epoch.
-        """
-
         self.is_train = True
         self.model.train()
         total_loss = 0
         batch_count = 0
-        self.writer.set_step((epoch-1) * self.epoch_len)
+        self.writer.set_step(epoch * self.epoch_len)
         self.writer.add_scalar("epoch", epoch)
 
         for batch_idx, batch in enumerate(
-            tqdm(self.train_loader, desc = f"train {epoch - 1}", total = self.epoch_len)
+            tqdm(self.train_loader, desc = f"train {epoch}", total = self.epoch_len)
         ):
-            #Batch to device
             batch['input_ids'] = batch['input_ids'].to(self.device)
             batch['labels'] = batch['labels'].to(self.device)
             attention_mask = batch["attention_mask"].to(self.device)
 
-            #Model prediction
+            src_input = batch['input_ids'][:, :-1]
+            tgt_input = batch['labels'][:, :-1]
+            tgt_output = batch['labels'][:, 1:]
+            src_mask = attention_mask[:, :-1].transpose(0, 1)
+
             outputs = self.model(
-                batch['input_ids'],
-                attention_mask=attention_mask
+                src_input,
+                tgt_input,
+                src_mask=src_mask
                 )
 
-            #Count loss
-            loss = self.criterion(outputs.logits, batch['labels'])
+            loss = self.criterion(outputs.logits, tgt_output)
 
-            #Gradient step
             loss.backward()
             self.optimizer.step()
             self.optimizer.zero_grad()
 
-            #Compute losses
             total_loss += loss.item()
             batch_count += 1
 
             if (batch_idx % self.log_step) == 0:
                 avg_loss = total_loss / batch_count
 
-                #WandB step
-                current_step = (epoch - 1) * self.epoch_len + batch_idx
+                current_step = epoch * self.epoch_len + batch_idx
                 self.writer.set_step(current_step, "train")
 
-                #Logging to WandB
                 self.writer.add_scalar("loss", avg_loss)
                 self.writer.add_scalar("learning_rate", self.optimizer.param_groups[0]['lr'])
 
-                #Logging to console
                 self.logger.info(f"Epoch {epoch}, Batch {batch_idx}, Loss = {avg_loss}")
 
         epoch_loss = total_loss / batch_count if batch_count > 0 else 0.0
-        # Evaluation
         val_loss = self._evaluate_epoch(epoch)
-        #Return values
-        return {"loss": epoch_loss, "val_loss": val_loss}
+        return epoch_loss, val_loss
     
     def _train_process(self):
-        """
-        Full train logic
-        """
         for epoch in range(self.num_epochs):
-            logs = self._train_epoch(epoch)
-            epoch_loss = logs["loss"]
-            val_loss = logs["val_loss"]
+            epoch_loss, val_loss = self._train_epoch(epoch)
+            self._last_epoch = epoch
 
             if epoch % 5 == 0:
                 self._save_checkpoint(epoch, save_best=False, only_best=False)
@@ -140,51 +117,69 @@ class BaseTrainer:
                 self.best_loss = val_loss
                 self._save_checkpoint(epoch, save_best=True, only_best=True)
                 self.logger.info(f"New best model! Val Loss: {val_loss:.4f}")
+
     
     def _evaluate_epoch(self, epoch):
         self.model.eval()
         val_loss = 0
         batch_count = 0
+        examples_logged = 0
+        
         with torch.no_grad():
             for batch_idx, batch in enumerate(
-                tqdm(self.test_loader, desc = f"Evaluation {epoch - 1}")
+                tqdm(self.eval_loader, desc = f"Evaluation {epoch}")
             ):
-                #Move to device
                 batch['input_ids'] = batch['input_ids'].to(self.device)
                 batch['labels'] = batch['labels'].to(self.device)
                 attention_mask = batch["attention_mask"].to(self.device)
 
-                #Model prediction
-                outputs = self.model(
-                    batch['input_ids'],
-                    attention_mask = attention_mask
-                    )
-                
-                
-                loss = self.criterion(outputs.logits, batch['labels'])
+                src_input = batch['input_ids'][:, :-1]
+                tgt_input = batch['labels'][:, :-1]
+                tgt_output = batch['labels'][:, 1:]
+                src_mask = attention_mask[:, :-1].transpose(0, 1)
 
-                #Updating
+                outputs = self.model(
+                    src_input,
+                    tgt_input,
+                    src_mask = src_mask
+                    )
+
+                loss = self.criterion(outputs.logits, tgt_output)
+
                 batch_count += 1
                 val_loss += loss.item()
+                
+                if examples_logged < 3 and batch_idx % 10 == 0:
+                    self._log_translation_examples(batch, outputs, batch_idx)
+                    examples_logged += 1
 
         avg_val_loss = val_loss / batch_count if batch_count > 0 else 0.0
         self.writer.set_step(epoch * self.epoch_len, "val")
         self.writer.add_scalar("loss", avg_val_loss)
         
         return avg_val_loss
+    
+    def _log_translation_examples(self, batch, outputs, batch_idx):
+        try:
+            tokenizer = self.eval_loader.dataset.dataset.tokenizer
+            
+            for i in range(min(2, batch['input_ids'].size(0))):
+                src_tokens = batch['input_ids'][i]
+                tgt_tokens = batch['labels'][i]
+                pred_tokens = outputs.logits[i].argmax(dim=-1)
+                
+                src_text = tokenizer.decode(src_tokens, skip_special_tokens=True)
+                tgt_text = tokenizer.decode(tgt_tokens, skip_special_tokens=True)
+                pred_text = tokenizer.decode(pred_tokens, skip_special_tokens=True)
+                
+                example_text = f"**Input (EN):** {src_text}\n**Target (RU):** {tgt_text}\n**Prediction (RU):** {pred_text}"
+                
+                self.writer.add_text(f"translation_example_{batch_idx}_{i}", example_text)
+                
+        except Exception as e:
+            self.logger.warning(f"Could not log translation examples: {e}")
 
     def _save_checkpoint(self, epoch, save_best=False, only_best=False):
-        """
-        Save the checkpoints.
-
-        Args:
-            epoch (int): current epoch number.
-            save_best (bool): if True, rename the saved checkpoint to 'model_best.pth'.
-            only_best (bool): if True and the checkpoint is the best, save it only as
-                'model_best.pth'(do not duplicate the checkpoint as
-                checkpoint-epochEpochNumber.pth)
-        """
-        #Create state
         state = {
             "epoch": epoch,
             "state_dict": self.model.state_dict(),
@@ -194,16 +189,13 @@ class BaseTrainer:
         if hasattr(self, 'lr_scheduler') and self.lr_scheduler:
             state["lr_scheduler"] = self.lr_scheduler.state_dict()
         
-        #Path to checkpoints
         filename = str(self.checkpoint_dir / f"checkpoint-epoch{epoch}.pth")
-        #Save all
         if not (only_best and save_best):
             torch.save(state, filename)
             if hasattr(self, 'writer') and self.writer:
                 self.writer.add_checkpoint(filename, str(self.checkpoint_dir.parent))
             if hasattr(self, 'logger'):
                 self.logger.info(f"Saving checkpoint: {filename} ...")
-        #Save only the best
         if save_best:
             best_path = str(self.checkpoint_dir / "model_best.pth")
             torch.save(state, best_path)
